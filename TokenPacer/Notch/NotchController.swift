@@ -11,7 +11,6 @@ final class NotchController {
     private var watchers: [LogWatcher]
     private let store: UsageStore
     private let preferences = Preferences()
-    private var alerts = AlertPolicy()
     private let preferencesWindow = PreferencesWindow()
     /// Constructing it starts Sparkle's scheduler, so it is owned here and
     /// handed to the view — never defaulted into a struct that gets rebuilt.

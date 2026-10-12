@@ -35,7 +35,8 @@ final class Preferences {
     /// Both of them. The watch mark is the one there is still time to act on —
     /// by the time a card says "over", the decision it was meant to inform has
     /// already been made. `AlertPolicy` fires the highest one crossed and each
-    /// one once per window, so a jump from 60 to 95 says "over" and not both.
+    /// one once until the figure drops back under it, so a jump from 60 to 95
+    /// says "over" and not both.
     func alertThresholds(for source: SourceID) -> [Double] {
         let zone = zone(for: source)
         return [zone.warnAt, zone.critAt]
@@ -55,7 +56,8 @@ final class Preferences {
     /// Both of them. The watch mark is the one there is still time to act on —
     /// by the time a banner says "over", the decision it was meant to inform has
     /// already been made. `AlertPolicy` fires the highest one crossed and each
-    /// one once per window, so a jump from 60 to 95 says "over" and not both.
+    /// one once until the figure drops back under it, so a jump from 60 to 95
+    /// says "over" and not both.
     var soundOnThreshold: Bool {
         didSet { store.set(soundOnThreshold, forKey: Key.soundOnThreshold) }
     }

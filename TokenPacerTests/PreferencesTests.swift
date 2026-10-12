@@ -150,33 +150,34 @@ private func defaults() -> UserDefaults {
 
 // MARK: - alerts
 
-private func crossings(_ percentages: [Double], resetsAt: Date = now.addingTimeInterval(3600),
-                       thresholds: [Double] = [75, 90]) -> [Double] {
+private func crossings(_ percentages: [Double?], thresholds: [Double] = [75, 90]) -> [Double] {
     var policy = AlertPolicy()
-    return percentages.compactMap {
-        policy.crossing(percent: $0, resetsAt: resetsAt, thresholds: thresholds)
-    }
+    return percentages.compactMap { policy.crossing(percent: $0, thresholds: thresholds) }
 }
 
-/// A figure that hovers either side of the mark must alert once, not eleven times.
-@Test func aThresholdAlertsOncePerWindow() {
-    #expect(crossings([70, 76, 77, 74, 76]) == [75])
+/// Seen once, a mark stays quiet for as long as the figure stays over it.
+@Test func aThresholdAlertsOnceWhileTheFigureStaysOver() {
+    #expect(crossings([70, 76, 77, 80, 80, 80]) == [75])
+}
+
+/// The bug: a reset stamp that moved on every read made each five-minute read
+/// look like a new window. Nothing but the figure decides now.
+@Test func aStandingFigureNeverAlertsTwice() {
+    #expect(crossings(Array(repeating: 80, count: 12)) == [75])
 }
 
 @Test func aJumpPastBothMarksSaysTheMoreUrgentThing() {
     // Crossing 90 in one poll should say "wrap up", not "running warm".
     #expect(crossings([20, 95]) == [90])
+    // And 75 was passed on the way, so it is spent too.
+    #expect(crossings([20, 95, 85]) == [90])
 }
 
-/// The next window is a fresh start: the same marks alert again.
-@Test func theNextWindowAlertsAgain() {
-    var policy = AlertPolicy()
-    let first = now.addingTimeInterval(3600)
-    let second = now.addingTimeInterval(3600 + 5 * 3600)
-
-    #expect(policy.crossing(percent: 80, resetsAt: first, thresholds: [75, 90]) == 75)
-    #expect(policy.crossing(percent: 85, resetsAt: first, thresholds: [75, 90]) == nil)
-    #expect(policy.crossing(percent: 80, resetsAt: second, thresholds: [75, 90]) == 75)
+/// Falling back under a mark re-arms it, and only that mark.
+@Test func droppingUnderAMarkReArmsIt() {
+    #expect(crossings([80, 74, 76]) == [75, 75])
+    #expect(crossings([95, 85, 92]) == [90, 90])
+    #expect(crossings([95, 5, 80, 95]) == [90, 75, 90])
 }
 
 /// Launching mid-window past the mark is worth one alert; nothing to compare
@@ -185,10 +186,10 @@ private func crossings(_ percentages: [Double], resetsAt: Date = now.addingTimeI
     #expect(crossings([92]) == [90])
 }
 
+/// Unknown is not zero: it neither alerts nor re-arms.
 @Test func anUnknownPercentageNeverAlerts() {
-    var policy = AlertPolicy()
-    #expect(policy.crossing(percent: nil, resetsAt: now, thresholds: [75]) == nil)
-    #expect(policy.crossing(percent: 99, resetsAt: nil, thresholds: [75]) == nil)
+    #expect(crossings([nil]) == [])
+    #expect(crossings([80, nil, 80]) == [75])
 }
 
 /// The chosen mark is stored by its raw value, so renaming a case would quietly
@@ -410,19 +411,15 @@ private func override(in suite: String) -> [String]? {
 
 /// The banner used to be raised at the far mark alone, which is the one there is
 /// nothing left to do about. Both marks are asked for now, on by default, and the
-/// policy still fires each of them once per window and the higher one first.
+/// policy still fires each of them once and the higher one first.
 @MainActor @Test func aBannerIsRaisedAtTheWatchMarkAsWellAsTheOver() {
     let preferences = Preferences(store: defaults(), installed: { _ in true })
     #expect(preferences.notifiesOnZone)                      // on unless turned off
     #expect(preferences.alertThresholds(for: .claude) == [75, 90])
 
     var policy = AlertPolicy()
-    let window = Date().addingTimeInterval(3600)
     let fired = [60.0, 80, 85, 95, 99].compactMap {
-        policy.crossing(
-            percent: $0, resetsAt: window,
-            thresholds: preferences.alertThresholds(for: .claude)
-        )
+        policy.crossing(percent: $0, thresholds: preferences.alertThresholds(for: .claude))
     }
     #expect(fired == [75, 90])
 

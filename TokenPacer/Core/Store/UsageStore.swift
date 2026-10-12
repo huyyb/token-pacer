@@ -134,7 +134,7 @@ final class UsageStore {
     /// Any tracked provider, not the pinned one: a window running out under a
     /// provider you are not looking at is precisely the one you want told about.
     /// It stays until somebody looks — `acknowledge()` — and each mark raises it
-    /// once per window, which is `AlertPolicy`'s own rule.
+    /// once until the figure falls back under it, which is `AlertPolicy`'s own rule.
     private(set) var alert: ZoneAlert?
 
     /// Raised when a new crossing lands, for the one thing the pill cannot do
@@ -156,11 +156,7 @@ final class UsageStore {
         let marks = alertThresholds[snapshot.source] ?? []
         guard !marks.isEmpty else { return }
         var policy = alertPolicies[snapshot.source] ?? AlertPolicy()
-        let crossed = policy.crossing(
-            percent: snapshot.sessionPercent,
-            resetsAt: snapshot.resetsAt,
-            thresholds: marks
-        )
+        let crossed = policy.crossing(percent: snapshot.sessionPercent, thresholds: marks)
         alertPolicies[snapshot.source] = policy
         guard let crossed, let percent = snapshot.sessionPercent else { return }
 
