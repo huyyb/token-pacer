@@ -268,8 +268,8 @@ private func clock(_ date: Date) -> String {
 private actor StatedSource: UsageSource {
     nonisolated let id: SourceID
     private let percent: Double
-    /// Fixed, not computed per poll: a window whose reset moves is a *new*
-    /// window, and the policy is right to let it speak again.
+    /// Fixed, not computed per poll: a reading is a figure and the window it
+    /// belongs to, and this one only needs the figure.
     private let resetsAt = Date.now.addingTimeInterval(3600)
 
     init(id: SourceID, percent: Double) {
