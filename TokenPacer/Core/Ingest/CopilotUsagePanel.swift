@@ -20,10 +20,14 @@ struct CopilotUsagePanel: UsagePanel {
 
     func fetch(now: Date = Date.now) async throws -> RateLimits {
         let text = try await read()
-        guard let limits = Self.parse(text, now: now) else {
-            throw PanelText.failure(in: text)
-        }
-        return limits
+        if let limits = Self.parse(text, now: now) { return limits }
+        throw Self.isUnmetered(text) ? PanelError.unmetered : PanelText.failure(in: text)
+    }
+
+    /// A reply that was read and carried quotas, none of them metered.
+    static func isUnmetered(_ raw: String) -> Bool {
+        let message = try? JSONDecoder().decode(Message.self, from: Data(raw.utf8))
+        return message?.result.map { !$0.quotaSnapshots.isEmpty && $0.metered == nil } ?? false
     }
 
     // MARK: - Parsing
@@ -38,9 +42,9 @@ struct CopilotUsagePanel: UsagePanel {
     static let graceSeconds: TimeInterval = 3600
 
     /// Nil when no quota in the reply has one: an error object where a result
-    /// should be, a release that moved the field, or an account whose every
-    /// quota is unmetered. The first two are failures; the third has no figure
-    /// to show either way.
+    /// should be, a release that moved the field, or a reply whose every quota
+    /// is unmetered. The first two are failures; the third is `isUnmetered`,
+    /// and the store keeps the figure it already has.
     static func parse(_ raw: String, now: Date, calendar: Calendar = .current) -> RateLimits? {
         guard let message = try? JSONDecoder().decode(Message.self, from: Data(raw.utf8)),
               let metered = message.result?.metered

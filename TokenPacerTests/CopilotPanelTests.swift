@@ -135,6 +135,20 @@ private let calendar = Calendar.current
     await #expect(throws: PanelError.unreadable) { try await garbage.fetch(now: now) }
 }
 
+/// Read fine, nothing metered: not the same thing as a reply that could not be read.
+@Test func aReplyWithNothingMeteredIsUnmeteredRatherThanUnreadable() async {
+    let unlimited = CopilotUsagePanel {
+        """
+        {"jsonrpc":"2.0","id":2,"result":{"quotaSnapshots":{
+          "chat":{"isUnlimitedEntitlement":true,"entitlementRequests":0,"usedRequests":0,
+            "remainingPercentage":100,"hasQuota":true},
+          "premium_interactions":{"isUnlimitedEntitlement":true,"entitlementRequests":0,
+            "usedRequests":0,"remainingPercentage":100,"hasQuota":true}}}}
+        """
+    }
+    await #expect(throws: PanelError.unmetered) { try await unlimited.fetch(now: now) }
+}
+
 /// `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `COPILOT_HOME` all move an agent's
 /// store, and a tracker that reads the default anyway reports an idle machine.
 @Test func anAgentHomeFollowsItsOwnEnvironmentVariable() {

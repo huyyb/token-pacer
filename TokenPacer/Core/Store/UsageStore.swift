@@ -677,6 +677,20 @@ final class UsageStore {
 
             Log.usage.info("ok \(id.rawValue, privacy: .public) in \(ms, privacy: .public)ms session=\(limits.primary?.usedPercent ?? -1, privacy: .public)% weekly=\(limits.secondary?.usedPercent ?? -1, privacy: .public)%")
 
+        // Copilot sometimes answers a metered account as if nothing were metered,
+        // and the next read has the budget back. That reply is no figure, so the
+        // last one stays — but it is not a failure either: no error under the row
+        // and no backoff, or a figure that is fine would read as broken.
+        case .failure(let error as PanelError) where error == .unmetered:
+            poller.ran(at: now)
+            pollers[id] = poller
+            limitsErrors[id] = nil
+            failures[id] = nil
+            errors[id] = Self.simulatedError
+            persist()
+
+            Log.usage.info("unmetered \(id.rawValue, privacy: .public) in \(ms, privacy: .public)ms, kept the last reading")
+
         case .failure(let error):
             poller.failed(at: now)
             pollers[id] = poller

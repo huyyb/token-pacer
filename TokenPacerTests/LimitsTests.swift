@@ -208,6 +208,53 @@ private func store(reading: @escaping ClaudeUsagePanel.Reader) async -> UsageSto
     #expect(store.errors[.claude] == PanelError.cliNotFound.message(for: SourceID.claude.displayName))
 }
 
+/// Copilot's reply flips between the budget and "everything unlimited" for the
+/// same account. The unlimited one must neither erase the figure nor put an
+/// error under it.
+@MainActor
+@Test func anUnmeteredCopilotReplyKeepsTheLastFigureWithoutAnError() async {
+    let metered = """
+    {"result":{"quotaSnapshots":{"premium_interactions":{"isUnlimitedEntitlement":false,
+      "entitlementRequests":9000,"usedRequests":4023,"remainingPercentage":55.3}}}}
+    """
+    let unmetered = """
+    {"result":{"quotaSnapshots":{"premium_interactions":{"isUnlimitedEntitlement":true,
+      "entitlementRequests":0,"usedRequests":0,"remainingPercentage":100}}}}
+    """
+    let replies = Replies([metered, unmetered])
+    let store = UsageStore(
+        sources: [SilentSource()], interval: 3600,
+        panels: [.copilot: CopilotUsagePanel { await replies.next() }], archive: nil
+    )
+
+    func read(at now: Date) async {
+        await store.refresh(now: now)
+        for _ in 0..<50 where store.isReadingLimits {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        await store.refresh(now: now)
+    }
+
+    await read(at: Date())
+    #expect(store.snapshots[.copilot]?.sessionPercent == 44.7)
+
+    await read(at: Date().addingTimeInterval(2 * 3600))
+    #expect(await replies.served == 2)
+    #expect(store.snapshots[.copilot]?.sessionPercent == 44.7)
+    #expect(store.errors[.copilot] == nil)
+}
+
+/// Hands out canned replies in order, and counts them.
+private actor Replies {
+    private var queue: [String]
+    private(set) var served = 0
+    init(_ queue: [String]) { self.queue = queue }
+    func next() -> String {
+        served += 1
+        return queue.count > 1 ? queue.removeFirst() : queue[0]
+    }
+}
+
 /// `h:mma (UTC)`, the shape the panel prints.
 private func clock(_ date: Date) -> String {
     let formatter = DateFormatter()

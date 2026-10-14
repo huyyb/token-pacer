@@ -34,6 +34,10 @@ enum PanelError: Error, Equatable {
     /// The panel rendered but carried no figure we recognise — in practice a
     /// layout change in a new release.
     case unreadable
+    /// The reply was read, and every quota in it was unlimited. Copilot answers
+    /// this way now and then for an account that is metered — the next read
+    /// carries the budget again — so it is not a figure and not a failure.
+    case unmetered
 
     /// Only a refusal that cannot change on its own stops us asking for good.
     /// A timeout, a missing sign-in and an unreadable panel all resolve without
@@ -41,7 +45,7 @@ enum PanelError: Error, Equatable {
     var isFatal: Bool {
         switch self {
         case .cliNotFound, .noTrustedDirectory: true
-        case .spawnFailed, .timedOut, .notSignedIn, .offline, .unreadable: false
+        case .spawnFailed, .timedOut, .notSignedIn, .offline, .unreadable, .unmetered: false
         }
     }
 
@@ -56,6 +60,7 @@ enum PanelError: Error, Equatable {
         case .notSignedIn: "Sign in to \(cli)"
         case .offline: "\(cli) can't connect right now"
         case .unreadable: "Could not read \(cli)'s usage panel"
+        case .unmetered: "\(cli) reported no metered quota"
         }
     }
 }
