@@ -26,7 +26,7 @@
 	     The private half of SUPublicEDKey lives in the login Keychain as
 	     "Private key for signing Sparkle updates" — it is not in this repo, and
 	     it cannot be recovered. -->
-	<key>SUFeedURL</key><string>https://github.com/heybui/token-pacer/releases/latest/download/appcast.xml</string>
+	<key>SUFeedURL</key><string>https://github.com/huyyb/token-pacer/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key><string>upjF7oD8vW9TXGxqDlR4XSQ5AQNojCkT8Xi87J0DZWc=</string>
 	<key>SUEnableAutomaticChecks</key><true/>
 	<key>SUAutomaticallyUpdate</key><true/>

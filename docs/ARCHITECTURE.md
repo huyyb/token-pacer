@@ -477,8 +477,8 @@ website's feed URL:
 
 | Repo | Holds | Reached by |
 |---|---|---|
-| `heybui/token-pacer` | source, release notes, notarized DMG and appcast | Sparkle, at `https://github.com/heybui/token-pacer/releases/latest/download/appcast.xml` |
-| `heybui/tokenpacer.com` | landing page and `appcast.xml` | Older builds, at `https://tokenpacer.com/appcast.xml` |
+| `huyyb/token-pacer` | source, release notes, notarized DMG and appcast | Sparkle, at `https://github.com/huyyb/token-pacer/releases/latest/download/appcast.xml` |
+| `huyyb/tokenpacer.com` | landing page and `appcast.xml` | Older builds, at `https://tokenpacer.com/appcast.xml` |
 | `redevify/homebrew-tap` | `Casks/token-pacer.rb` | `brew tap redevify/tap` |
 
 Both URLs serve the same generated feed. Installed builds keep polling the URL

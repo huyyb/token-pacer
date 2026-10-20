@@ -101,7 +101,7 @@ jobs:
         ## run that had already notarized a build.
         env:
           GH_TOKEN: ${{ secrets.SITE_REPO_TOKEN }}
-          SITE_REPO: ${{ vars.SITE_REPO || 'heybui/tokenpacer.com' }}
+          SITE_REPO: ${{ vars.SITE_REPO || 'huyyb/tokenpacer.com' }}
           VERSION: ${{ steps.version.outputs.version }}
           DEVID_P12_BASE64: ${{ secrets.DEVID_P12_BASE64 }}
           DEVID_P12_PASSWORD: ${{ secrets.DEVID_P12_PASSWORD }}
@@ -188,7 +188,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SITE_REPO_TOKEN: ${{ secrets.SITE_REPO_TOKEN }}
-          SITE_REPO: ${{ vars.SITE_REPO || 'heybui/tokenpacer.com' }}
+          SITE_REPO: ${{ vars.SITE_REPO || 'huyyb/tokenpacer.com' }}
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || 'redevify/homebrew-tap' }}

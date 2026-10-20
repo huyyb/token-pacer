@@ -41,7 +41,7 @@ DMG     := build/$(APP)-$(VERSION).dmg
 
 ## The app's public release carries the DMG and appcast. The site serves the
 ## same feed to older installed builds; the tap has the cask.
-RELEASE_REPO ?= heybui/token-pacer
+RELEASE_REPO ?= huyyb/token-pacer
 SITE_DIR  ?= ../tokenpacer.com
 HOMEBREW_TAP_REPO ?= redevify/homebrew-tap
 HOMEBREW_TAP_DIR  ?= ../homebrew-tap

@@ -39,7 +39,7 @@ dependency (Sparkle) is already in the repo.
 
 ```sh
 # 1. Get the code
-git clone https://github.com/heybui/token-pacer.git
+git clone https://github.com/huyyb/token-pacer.git
 cd token-pacer
 
 # 2. Build the app
