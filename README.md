@@ -96,7 +96,7 @@ see §7 of [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 
 ## 📄 License
 
-[MIT](LICENSE) © 2026 Hey Bui — free to use, change and share.
+[MIT](LICENSE) © 2026 Huyy B — free to use, change and share.
 
 Bundled parts keep their own licenses: Sparkle (MIT) and Instrument Sans
 (SIL OFL 1.1).
