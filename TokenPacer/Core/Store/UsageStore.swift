@@ -34,6 +34,8 @@ final class UsageStore {
     /// its own, so a hundred thousand events carried a hundred thousand copies
     /// of a dozen names.
     private var names = Set<String>()
+    /// Events older than `rawRetention`, as totals.
+    private var rollups: [SourceID: UsageRollup] = [:]
 
     private func sharingNames(_ events: [UsageEvent]) -> [UsageEvent] {
         events.map { event in
@@ -212,8 +214,12 @@ final class UsageStore {
         return zip(fresh, fresh.dropFirst()).contains { $0.timestamp > $1.timestamp }
     }
 
-    /// Raw events are kept only long enough to serve the history grid.
+    /// How far back the history grid reaches.
     private static let retention = TimeInterval(Aggregator.historyDays) * 24 * 3600
+    /// How long an event is kept whole. The longest span anything but the grid
+    /// asks about is a billing month; past that an event is only a day's total,
+    /// and `rollups` holds it as one.
+    static let rawRetention: TimeInterval = 35 * 24 * 3600
 
     /// Called with every fresh snapshot of the active source. The alerting lives
     /// outside Core — this is just where the snapshots already are.
@@ -287,6 +293,7 @@ final class UsageStore {
         for source in sources where !source.rereadsOnLaunch {
             guard let state = archived.sources[source.id] else { continue }
             events[source.id] = sharingNames(state.events)
+            rollups[source.id] = state.rollup
             count += state.events.count
             if stale {
                 // Read everything again, as this build decodes it. The first
@@ -330,7 +337,8 @@ final class UsageStore {
         var archived = ArchivedEvents()
         for source in sources {
             archived.sources[source.id] = ArchivedEvents.PerSource(
-                cursors: await source.cursors(), events: events[source.id] ?? []
+                cursors: await source.cursors(), events: events[source.id] ?? [],
+                rollup: rollups[source.id]
             )
         }
         archive.saveEvents(archived)
@@ -487,7 +495,10 @@ final class UsageStore {
                 var fresh = try await source.poll()
                 fresh.events = sharingNames(fresh.events)
                 var merged = events[source.id] ?? []
+                let rawCutoff = now.addingTimeInterval(-Self.rawRetention)
                 if rebuilding.remove(source.id) != nil {
+                    // The re-read fills its old days again from scratch.
+                    rollups[source.id]?.clear(for: fresh.events.lazy.filter { $0.timestamp < rawCutoff })
                     // The whole log corpus, decoded afresh: it replaces what was
                     // archived, and only what it no longer has is kept.
                     let reread = Set(fresh.events.map(\.id))
@@ -511,11 +522,13 @@ final class UsageStore {
 
                 // Expiry is a prefix of a sorted array, so this walks only what it
                 // drops — nothing, on almost every tick — rather than all of it.
-                let cutoff = now.addingTimeInterval(-Self.retention)
-                if let firstKept = merged.firstIndex(where: { $0.timestamp >= cutoff }) {
-                    merged.removeFirst(firstKept)
-                } else if merged.last.map({ $0.timestamp < cutoff }) == true {
-                    merged.removeAll()
+                let expired = merged.prefix { $0.timestamp < rawCutoff }
+                if !expired.isEmpty {
+                    var rollup = rollups[source.id] ?? UsageRollup()
+                    expired.forEach { rollup.add($0) }
+                    rollup.prune(before: now.addingTimeInterval(-Self.retention))
+                    rollups[source.id] = rollup
+                    merged.removeFirst(expired.count)
                 }
                 if !fresh.events.isEmpty { eventsDirty = true }
                 events[source.id] = merged
@@ -543,6 +556,7 @@ final class UsageStore {
                     stated: fresh.limits,
                     panel: currentLimits(for: source.id, at: now),
                     events: merged,
+                    rolled: rollups[source.id] ?? UsageRollup(),
                     working: Self.working(
                         sessions: sessions, logs: logWorking, for: source.id, tracked: tracked
                     ),

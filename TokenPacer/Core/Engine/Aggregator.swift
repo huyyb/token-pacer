@@ -77,6 +77,9 @@ enum Aggregator {
 
     static func panel(
         events: [UsageEvent],
+        /// Totals for the days too old to keep as events. Only the history
+        /// grid reaches back that far.
+        rolled: UsageRollup = UsageRollup(),
         /// The span the splits describe. Not always a five-hour window: a
         /// workspace on a credit budget is metered by the month, and the three
         /// columns have to cover the same period as the figure above them.
@@ -97,7 +100,7 @@ enum Aggregator {
             byProject: session.byProject,
             byKind: session.byKind,
             weekly: weeklyWindow.map { splits(events, in: $0, weights: weights) },
-            history: history(events: events, at: now, days: historyDays,
+            history: history(events: events, rolled: rolled, at: now, days: historyDays,
                              weights: weights, calendar: calendar)
         )
     }
@@ -177,6 +180,7 @@ enum Aggregator {
 
     static func history(
         events: [UsageEvent],
+        rolled: UsageRollup = UsageRollup(),
         at now: Date,
         days: Int,
         weights: TokenWeights = .default,
@@ -186,6 +190,10 @@ enum Aggregator {
         for event in events {
             totals[calendar.startOfDay(for: event.timestamp), default: 0]
                 += event.counts.weighted(weights)
+        }
+        for bucket in rolled.totals {
+            totals[calendar.startOfDay(for: bucket.start), default: 0]
+                += bucket.counts.weighted(weights)
         }
         let today = calendar.startOfDay(for: now)
         // Quiet days are rows too — a gap in the strip is information.

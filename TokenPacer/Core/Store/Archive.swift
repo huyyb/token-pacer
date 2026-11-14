@@ -65,6 +65,8 @@ struct ArchivedEvents: Codable, Sendable {
     struct PerSource: Codable, Sendable {
         var cursors: [String: JSONLReader.Cursor] = [:]
         var events: [UsageEvent] = []
+        /// Optional so an archive from before the rollup still decodes.
+        var rollup: UsageRollup?
     }
 
     var version = currentVersion

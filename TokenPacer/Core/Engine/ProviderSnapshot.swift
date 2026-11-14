@@ -14,6 +14,7 @@ struct SnapshotInput {
     /// the window it described has closed.
     var panel: RateLimits?
     var events: [UsageEvent]
+    var rolled = UsageRollup()
     var working = 0
     var now: Date
     var weights: TokenWeights = .default
@@ -70,6 +71,7 @@ extension ProviderSnapshot {
             source: input.source,
             limits: limits(input),
             events: input.events,
+            rolled: input.rolled,
             working: input.working,
             at: input.now,
             weights: input.weights,

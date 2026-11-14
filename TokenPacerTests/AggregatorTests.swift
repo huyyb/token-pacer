@@ -135,3 +135,25 @@ private func event(
     #expect(noWeek.weekly == nil)
     #expect(noWeek.splits(for: .weekly).byModel.map(\.name) == ["now"])
 }
+
+/// An event folded into the rollup draws the same grid it drew whole — in a
+/// half-hour zone too, where a day does not start on a UTC hour.
+@Test func rolledUpDaysDrawTheSameHistoryAsRawEvents() {
+    var india = Calendar(identifier: .gregorian)
+    india.timeZone = TimeZone(identifier: "Asia/Kolkata")!
+    let fortyDays: Double = 60 * 24 * 40
+    let old: [UsageEvent] = stride(from: 0.0, to: 14_400, by: 97).map { (offset: Double) in
+        event(minutesAgo: fortyDays + offset, output: Int(offset) + 1)
+    }
+    var rolled = UsageRollup()
+    old.forEach { rolled.add($0) }
+
+    for calendar in [utc, india] {
+        let raw = Aggregator.history(events: old, at: t0, days: 90, calendar: calendar)
+        let folded = Aggregator.history(events: [], rolled: rolled, at: t0, days: 90, calendar: calendar)
+        #expect(raw == folded)
+    }
+
+    rolled.prune(before: t0)
+    #expect(rolled.buckets.isEmpty)
+}

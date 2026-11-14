@@ -59,6 +59,7 @@ enum SnapshotBuilder {
         source: SourceID,
         limits: RateLimits?,
         events: [UsageEvent],
+        rolled: UsageRollup = UsageRollup(),
         /// Sessions of this provider with a model answering right now. The dot,
         /// the running border and the badge are one fact told three ways, so
         /// they are one number.
@@ -124,7 +125,7 @@ enum SnapshotBuilder {
         // panel alone, which is shut almost always. On the 5s tick it was the
         // most expensive thing the app did, and it grew with the history.
         snapshot.panel = panel ?? Aggregator.panel(
-            events: events, window: splitSpan, weeklyWindow: secondary?.span,
+            events: events, rolled: rolled, window: splitSpan, weeklyWindow: secondary?.span,
             at: now, weights: weights
         )
 
