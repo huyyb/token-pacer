@@ -69,7 +69,7 @@ actor CopilotSource: UsageSource {
     }
 
     /// Nothing: see `rereadsOnLaunch`.
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<String>) {}
+    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {}
     func cursors() -> [String: JSONLReader.Cursor] { [:] }
 
     func poll() throws -> SourceSnapshot {
@@ -175,7 +175,6 @@ actor CopilotSource: UsageSource {
                 // `owner/name` when the session was opened in a repository,
                 // which reads better than the folder name behind it.
                 project: text(statement, 9) ?? text(statement, 10).flatMap(ProjectName.of),
-                sessionID: text(statement, 8),
                 counts: counts
             ))
         }

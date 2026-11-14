@@ -20,7 +20,6 @@ private func event(
         timestamp: t0.addingTimeInterval(-minutesAgo * 60),
         model: model,
         project: project,
-        sessionID: "s",
         counts: TokenCounts(input: 0, output: output)
     )
 }

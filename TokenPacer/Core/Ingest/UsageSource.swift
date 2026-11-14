@@ -17,7 +17,7 @@ protocol UsageSource: Actor {
     /// Byte offsets from the last run, so a relaunch reads only what was appended
     /// rather than 700MB of history. `seen` is rebuilt from the archived events
     /// rather than stored twice.
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<String>)
+    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>)
     func cursors() -> [String: JSONLReader.Cursor]
 
     /// Reads its whole history again on every launch, so nothing it archived
@@ -68,7 +68,7 @@ struct LogActivity: Equatable, Sendable {
 /// own state inside the decode closure without overlapping access to itself.
 struct LogScanner {
     private var reader = JSONLReader()
-    private var seen = Set<String>()
+    private var seen = Set<UsageEvent.ID>()
 
     /// `seen` only has to catch history replayed into a *new* file on resume;
     /// cursors already guarantee each line is read once.
@@ -106,7 +106,7 @@ struct LogScanner {
         }.map(\.key)
     }
 
-    mutating func restore(cursors: [String: JSONLReader.Cursor], seen: Set<String>) {
+    mutating func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {
         reader.archived = cursors
         self.seen = seen
     }

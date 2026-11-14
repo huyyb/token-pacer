@@ -1,24 +1,69 @@
 import Foundation
 
 /// One billed exchange, normalised across CLIs.
+///
+/// Kept small on purpose: ninety days of a heavy user is well over a hundred
+/// thousand of these, all held in memory. The id is a hash rather than the
+/// string it is made of, and the session id is not kept — nothing reads it.
 struct UsageEvent: Equatable, Sendable, Identifiable, Codable {
+    typealias ID = UInt64
+
     /// Short keys: this is written 45,000 times over, and the field names would
     /// otherwise be most of the file.
     enum CodingKeys: String, CodingKey {
         case id = "i", source = "s", timestamp = "t", model = "m"
-        case project = "p", sessionID = "n", counts = "c"
+        case project = "p", counts = "c"
     }
 
     /// Dedupe key. Resumed sessions replay history into a new file, so the same
     /// exchange can appear in more than one log.
-    let id: String
+    let id: ID
     let source: SourceID
     let timestamp: Date
-    let model: String?
-    /// Last path component of the working directory.
-    let project: String?
-    let sessionID: String?
+    /// `var` so the store can swap in a shared copy of a repeated name.
+    var model: String?
+    /// The repository the working directory is in.
+    var project: String?
     let counts: TokenCounts
+
+    /// `key` is the readable dedupe key — `claude:<message>#<request>` — and is
+    /// hashed on the way in.
+    init(
+        id key: String, source: SourceID, timestamp: Date,
+        model: String?, project: String?, counts: TokenCounts
+    ) {
+        self.id = Self.hash(key)
+        self.source = source
+        self.timestamp = timestamp
+        self.model = model
+        self.project = project
+        self.counts = counts
+    }
+
+    /// An archive written before the id was hashed stores the key itself;
+    /// hashing it here lands on the same id the decoder now produces, so the
+    /// cursors and the dedupe set carry over without a re-read.
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let key = try? c.decode(String.self, forKey: .id) {
+            id = Self.hash(key)
+        } else {
+            id = try c.decode(ID.self, forKey: .id)
+        }
+        source = try c.decode(SourceID.self, forKey: .source)
+        timestamp = try c.decode(Date.self, forKey: .timestamp)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        project = try c.decodeIfPresent(String.self, forKey: .project)
+        counts = try c.decode(TokenCounts.self, forKey: .counts)
+    }
+
+    /// FNV-1a, 64-bit. Stable across launches, unlike `hashValue`, which is
+    /// seeded per process and would orphan every archived id.
+    /// ponytail: 64-bit hash, ~1e-9 collision odds at 150k events; widen to a
+    /// pair of hashes if a dropped duplicate is ever seen.
+    static func hash(_ key: String) -> ID {
+        key.utf8.reduce(0xcbf2_9ce4_8422_2325) { ($0 ^ ID($1)) &* 0x100_0000_01b3 }
+    }
 }
 
 /// Rate limits a provider states outright. Codex writes them into its rollout
@@ -111,7 +156,7 @@ struct RateLimits: Equatable, Sendable, Codable {
 
 struct SourceSnapshot: Sendable {
     let source: SourceID
-    let events: [UsageEvent]
+    var events: [UsageEvent]
     /// Non-nil only for sources that publish their own limits.
     let limits: RateLimits?
     /// Sessions of this source with a turn in flight — the activity dot, the

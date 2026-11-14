@@ -23,7 +23,7 @@ private func lines(_ name: String) -> [Data] {
     #expect(first.source == .claude)
     #expect(first.counts.total > 0)
     #expect(first.model != nil)
-    #expect(first.id.hasPrefix("claude:"))
+    #expect(first.id != 0)
 }
 
 /// Claude reports cache counts alongside input; nothing should be subtracted.
@@ -281,7 +281,7 @@ private actor SlowSource: UsageSource {
     nonisolated let id = SourceID.codex
     private(set) var polls = 0
 
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<String>) {}
+    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {}
     func cursors() -> [String: JSONLReader.Cursor] { [:] }
 
     func poll() throws -> SourceSnapshot {

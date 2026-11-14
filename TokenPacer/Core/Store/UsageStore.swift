@@ -30,6 +30,19 @@ final class UsageStore {
     private let sources: [any UsageSource]
     private let weights: TokenWeights
     private var events: [SourceID: [UsageEvent]] = [:]
+    /// One copy of each model and project name. Every decoded line allocates
+    /// its own, so a hundred thousand events carried a hundred thousand copies
+    /// of a dozen names.
+    private var names = Set<String>()
+
+    private func sharingNames(_ events: [UsageEvent]) -> [UsageEvent] {
+        events.map { event in
+            var event = event
+            event.model = event.model.map { names.insert($0).memberAfterInsert }
+            event.project = event.project.map { names.insert($0).memberAfterInsert }
+            return event
+        }
+    }
     /// Poll state per source. Claude has nowhere else to learn the figure;
     /// Codex states it in its own logs and only needs a run once those have
     /// gone quiet — `refreshLimits` counts a log-stated reading as a run, and
@@ -273,7 +286,7 @@ final class UsageStore {
         let stale = archived.version < ArchivedEvents.currentVersion
         for source in sources where !source.rereadsOnLaunch {
             guard let state = archived.sources[source.id] else { continue }
-            events[source.id] = state.events
+            events[source.id] = sharingNames(state.events)
             count += state.events.count
             if stale {
                 // Read everything again, as this build decodes it. The first
@@ -471,7 +484,8 @@ final class UsageStore {
         // `/usage`. Their last snapshot stays in the dictionary; nothing reads it.
         for source in sources where tracked.contains(source.id) {
             do {
-                let fresh = try await source.poll()
+                var fresh = try await source.poll()
+                fresh.events = sharingNames(fresh.events)
                 var merged = events[source.id] ?? []
                 if rebuilding.remove(source.id) != nil {
                     // The whole log corpus, decoded afresh: it replaces what was

@@ -154,7 +154,7 @@ private func at(_ minutes: Double) -> Date { t0.addingTimeInterval(minutes * 60)
 private actor SilentSource: UsageSource {
     nonisolated let id: SourceID = .claude
     func poll() throws -> SourceSnapshot { SourceSnapshot(source: id, events: [], limits: nil) }
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<String>) {}
+    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {}
     func cursors() -> [String: JSONLReader.Cursor] { [:] }
 }
 
@@ -277,7 +277,7 @@ private actor StatedSource: UsageSource {
         self.percent = percent
     }
 
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<String>) {}
+    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {}
     func cursors() -> [String: JSONLReader.Cursor] { [:] }
 
     func poll() throws -> SourceSnapshot {

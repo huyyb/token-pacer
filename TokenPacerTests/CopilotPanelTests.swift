@@ -237,7 +237,7 @@ private let calendar = Calendar.current
     func events(_ source: SourceID) -> [UsageEvent] {
         [UsageEvent(
             id: "e1", source: source, timestamp: now.addingTimeInterval(-600),
-            model: "gpt-5.6", project: "thing", sessionID: "s1",
+            model: "gpt-5.6", project: "thing",
             counts: TokenCounts(input: 100, output: 50)
         )]
     }

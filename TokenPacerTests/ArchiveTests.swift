@@ -95,7 +95,7 @@ private actor CountingSource: UsageSource {
         self.root = root
     }
 
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<String>) {
+    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {
         scanner.restore(cursors: cursors, seen: seen)
     }
 
@@ -304,7 +304,7 @@ private func line(id: String, output: Int, at date: Date) -> String {
 
     func archived(_ id: String, project: String) -> UsageEvent {
         UsageEvent(id: id, source: .claude, timestamp: Date(), model: "claude-opus-5",
-                   project: project, sessionID: "s",
+                   project: project,
                    counts: TokenCounts(input: 10, output: 100))
     }
     let archive = temporaryArchive()
@@ -332,4 +332,20 @@ private func line(id: String, output: Int, at date: Date) -> String {
 
     #expect(store.eventCount(.claude) == 2)
     #expect(projects() == ["demo", "gone"])
+}
+
+/// An archive from before the id was hashed stores the key itself. It must land
+/// on the id the decoder produces now, and a hashed id must survive JSON whole —
+/// a 64-bit value read back through a double would lose its low bits.
+@Test func eventIdsSurviveTheArchiveInBothSpellings() throws {
+    let legacy = Data(#"{"i":"claude:m1#r1","s":"claude","t":0,"c":{"output":1,"input":0,"cacheWrite":0,"cacheRead":0,"reasoning":0}}"#.utf8)
+    let decoded = try JSONDecoder().decode(UsageEvent.self, from: legacy)
+    #expect(decoded.id == UsageEvent.hash("claude:m1#r1"))
+
+    let event = UsageEvent(id: "claude:m2#r2", source: .claude, timestamp: Date(timeIntervalSince1970: 0),
+                           model: nil, project: nil, counts: TokenCounts(output: 1))
+    let round = try JSONDecoder().decode(UsageEvent.self, from: JSONEncoder().encode(event))
+    #expect(round.id == event.id)
+    let big = try JSONDecoder().decode(UsageEvent.self, from: Data(#"{"i":18446744073709551557,"s":"claude","t":0,"c":{"output":1,"input":0,"cacheWrite":0,"cacheRead":0,"reasoning":0}}"#.utf8))
+    #expect(big.id == 18_446_744_073_709_551_557)
 }

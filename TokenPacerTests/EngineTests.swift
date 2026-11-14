@@ -16,7 +16,6 @@ private func event(_ offsetHours: Double, output: Int = 1000, id: String = UUID(
         timestamp: t0.addingTimeInterval(offsetHours * 3600),
         model: "claude-opus-5",
         project: "demo",
-        sessionID: "s",
         counts: TokenCounts(input: 100, output: output)
     )
 }
@@ -42,7 +41,7 @@ private func event(_ offsetHours: Double, output: Int = 1000, id: String = UUID(
     let ragged = UsageEvent(
         id: "a", source: .claude,
         timestamp: t0.addingTimeInterval(37 * 60),   // 37 minutes past the hour
-        model: nil, project: nil, sessionID: nil,
+        model: nil, project: nil,
         counts: TokenCounts(output: 10)
     )
     let window = WindowCalculator.windows(from: [ragged], calendar: utc)[0]
@@ -285,7 +284,7 @@ private func event(_ offsetHours: Double, output: Int = 1000, id: String = UUID(
 @Test func theMixIsWeightedAndNeverCountsReasoningTwice() {
     let event = UsageEvent(
         id: "a", source: .claude, timestamp: t0,
-        model: nil, project: nil, sessionID: nil,
+        model: nil, project: nil,
         counts: TokenCounts(input: 100, output: 100, cacheWrite: 0, cacheRead: 100, reasoning: 90)
     )
     let mix = Aggregator.mix([event])
@@ -311,7 +310,7 @@ private func event(_ offsetHours: Double, output: Int = 1000, id: String = UUID(
         UsageEvent(
             id: "\(daysAgo)", source: .copilot,
             timestamp: now.addingTimeInterval(-daysAgo * 86_400),
-            model: "gpt-6-astra", project: "thing", sessionID: nil,
+            model: "gpt-6-astra", project: "thing",
             counts: TokenCounts(input: 100, output: 100)
         )
     }

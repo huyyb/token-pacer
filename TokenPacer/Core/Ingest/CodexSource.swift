@@ -42,7 +42,7 @@ actor CodexSource: UsageSource {
         self.changed = changed
     }
 
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<String>) {
+    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {
         scanner.restore(cursors: cursors, seen: seen)
     }
 
@@ -137,7 +137,6 @@ actor CodexSource: UsageSource {
                 // carries no model at all.
                 model: row.payload?.model ?? modelByFile[file],
                 project: projectByFile[file],
-                sessionID: payload.session_id,
                 counts: counts
             )]
 
@@ -166,7 +165,6 @@ actor CodexSource: UsageSource {
             timestamp: stamp,
             model: modelByFile[file],
             project: projectByFile[file],
-            sessionID: nil,
             counts: counts
         )]
     }
@@ -187,7 +185,6 @@ actor CodexSource: UsageSource {
         struct Payload: Decodable {
             let cwd: String?
             let model: String?
-            let session_id: String?
             let response_id: String?
             let usage: Usage?
             let rate_limits: Limits?

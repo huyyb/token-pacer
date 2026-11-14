@@ -42,7 +42,7 @@ actor ClaudeCodeSource: UsageSource {
         return now.timeIntervalSince(lastScan) < Self.scanAtLeastEvery
     }
 
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<String>) {
+    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {
         scanner.restore(cursors: cursors, seen: seen)
     }
 
@@ -93,7 +93,6 @@ actor ClaudeCodeSource: UsageSource {
             timestamp: stamp,
             model: row.message?.model,
             project: row.cwd.flatMap(ProjectName.of),
-            sessionID: row.sessionId,
             counts: counts
         )]
     }
@@ -104,7 +103,6 @@ actor ClaudeCodeSource: UsageSource {
         let type: String?
         let timestamp: String?
         let cwd: String?
-        let sessionId: String?
         let requestId: String?
         let message: Message?
 
