@@ -15,9 +15,8 @@ protocol UsageSource: Actor {
     func poll() throws -> SourceSnapshot
 
     /// Byte offsets from the last run, so a relaunch reads only what was appended
-    /// rather than 700MB of history. `seen` is rebuilt from the archived events
-    /// rather than stored twice.
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>)
+    /// rather than 700MB of history.
+    func restore(cursors: [String: JSONLReader.Cursor])
     func cursors() -> [String: JSONLReader.Cursor]
 
     /// Reads its whole history again on every launch, so nothing it archived
@@ -64,16 +63,11 @@ struct LogActivity: Equatable, Sendable {
     var isAwaitingResponse: Bool { turnAt != nil && !turnEnded }
 }
 
-/// Shared plumbing: cursors plus dedupe. A value type, so a source can mutate its
+/// Shared plumbing: cursors and turn tracking. Dedupe is the store's, which
+/// holds every event it could collide with. A value type, so a source can mutate its
 /// own state inside the decode closure without overlapping access to itself.
 struct LogScanner {
     private var reader = JSONLReader()
-    private var seen = Set<UsageEvent.ID>()
-
-    /// `seen` only has to catch history replayed into a *new* file on resume;
-    /// cursors already guarantee each line is read once.
-    /// ponytail: flat cap, swap for a time-windowed set if a heavy user trips it.
-    private static let seenLimit = 50_000
 
     /// One reading per log file. A machine runs several sessions at once and
     /// they are not one stream: the newest line belongs to whichever session was
@@ -106,9 +100,8 @@ struct LogScanner {
         }.map(\.key)
     }
 
-    mutating func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {
+    mutating func restore(cursors: [String: JSONLReader.Cursor]) {
         reader.archived = cursors
-        self.seen = seen
     }
 
     var cursors: [String: JSONLReader.Cursor] { reader.archived }
@@ -179,15 +172,15 @@ struct LogScanner {
                 break
             }
             for line in lines {
-                for event in decode(line, file) where !seen.contains(event.id) {
-                    seen.insert(event.id)
-                    events.append(event)
-                }
+                events.append(contentsOf: decode(line, file))
             }
         }
-        if seen.count > Self.seenLimit { seen.removeAll(keepingCapacity: true) }
         prune(at: Date.now)
-        return events.sorted { $0.timestamp < $1.timestamp }
+        // Within this scan only: Codex repeats a `token_count` when just the
+        // limits moved. Across scans the store dedupes against what it holds.
+        var unique = Set<UsageEvent.ID>()
+        return events.filter { unique.insert($0.id).inserted }
+            .sorted { $0.timestamp < $1.timestamp }
     }
 
     /// A month of retained logs is a month of files, and all but the last few

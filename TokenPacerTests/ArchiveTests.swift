@@ -95,8 +95,8 @@ private actor CountingSource: UsageSource {
         self.root = root
     }
 
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {
-        scanner.restore(cursors: cursors, seen: seen)
+    func restore(cursors: [String: JSONLReader.Cursor]) {
+        scanner.restore(cursors: cursors)
     }
 
     func cursors() -> [String: JSONLReader.Cursor] { scanner.cursors }
@@ -421,4 +421,33 @@ private func waitUntil(_ condition: () -> Bool) async throws {
     #expect(archive.hasEventLog)
     #expect(!FileManager.default.fileExists(atPath: archive.legacyEventsURL.path))
     #expect(archive.loadEvents()?.sources[.codex]?.cursors["x"]?.offset == 3)
+}
+
+/// The doubles an older archive carries collapse on the way in, and a resumed
+/// session replaying an exchange older than the raw window — already folded
+/// into the rollup, so no id to catch it by — is dropped rather than counted
+/// again.
+@MainActor
+@Test func duplicatesAndOldReplaysAreNotCountedTwice() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appending(path: "token-pacer-tests/\(UUID().uuidString)")
+    let recent = UsageEvent(id: "claude:mr#r", source: .claude, timestamp: Date(),
+                            model: nil, project: nil, counts: TokenCounts(output: 1))
+    let archive = temporaryArchive()
+    var old = ArchivedEvents()
+    old.sources[.claude] = ArchivedEvents.PerSource(events: [recent, recent, recent])
+    archive.saveEvents(old)
+
+    let fortyDaysAgo = Date().addingTimeInterval(-40 * 86_400)
+    _ = try writeLog([line(id: "replayed", output: 500, at: fortyDaysAgo)],
+                     to: root, named: "resumed.jsonl")
+
+    let store = UsageStore(sources: [CountingSource(root: root)], interval: 3600, archive: archive)
+    store.start()
+    try await waitUntil { store.snapshots[.claude] != nil }
+    store.stop()
+
+    #expect(store.eventCount(.claude) == 1)
+    let history = store.snapshots[.claude]?.panel.history ?? []
+    #expect(history.allSatisfy { $0.day >= Calendar.current.startOfDay(for: Date()) || $0.weighted == 0 })
 }

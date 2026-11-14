@@ -256,7 +256,7 @@ private actor TallyingSource: UsageSource {
         polls += 1
         return SourceSnapshot(source: id, events: [], limits: nil)
     }
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {}
+    func restore(cursors: [String: JSONLReader.Cursor]) {}
     func cursors() -> [String: JSONLReader.Cursor] { [:] }
 }
 

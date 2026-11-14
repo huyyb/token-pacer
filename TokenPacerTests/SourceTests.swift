@@ -281,7 +281,7 @@ private actor SlowSource: UsageSource {
     nonisolated let id = SourceID.codex
     private(set) var polls = 0
 
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {}
+    func restore(cursors: [String: JSONLReader.Cursor]) {}
     func cursors() -> [String: JSONLReader.Cursor] { [:] }
 
     func poll() throws -> SourceSnapshot {

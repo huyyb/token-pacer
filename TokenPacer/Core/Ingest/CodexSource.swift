@@ -42,8 +42,8 @@ actor CodexSource: UsageSource {
         self.changed = changed
     }
 
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {
-        scanner.restore(cursors: cursors, seen: seen)
+    func restore(cursors: [String: JSONLReader.Cursor]) {
+        scanner.restore(cursors: cursors)
     }
 
     func cursors() -> [String: JSONLReader.Cursor] { scanner.cursors }
@@ -149,7 +149,7 @@ actor CodexSource: UsageSource {
     ///
     /// Keyed by the running total it brought the session to: Codex repeats a
     /// `token_count` when only the limits moved, and a repeat has the same
-    /// total, so `seen` drops it.
+    /// total, so the store's dedupe drops it.
     private func legacyUsage(_ row: Line, at stamp: Date, file: URL) -> [UsageEvent] {
         guard let info = row.payload?.info,
               let usage = info.last_token_usage,

@@ -69,7 +69,7 @@ actor CopilotSource: UsageSource {
     }
 
     /// Nothing: see `rereadsOnLaunch`.
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {}
+    func restore(cursors: [String: JSONLReader.Cursor]) {}
     func cursors() -> [String: JSONLReader.Cursor] { [:] }
 
     func poll() throws -> SourceSnapshot {

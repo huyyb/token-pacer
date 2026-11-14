@@ -36,6 +36,15 @@ final class UsageStore {
     private var names = Set<String>()
     /// Events older than `rawRetention`, as totals.
     private var rollups: [SourceID: UsageRollup] = [:]
+    /// The ids of the events held whole: the one dedupe. A resumed session
+    /// replays its history into a new file, and the scanner's own set — capped
+    /// at 50,000 and emptied past it — let a heavy user's replays through,
+    /// a third of the archive counted twice.
+    private var ids: [SourceID: Set<UsageEvent.ID>] = [:]
+    /// Sources whose history is already held, from the archive or a first
+    /// read. An event older than `rawRetention` arriving from one of these can
+    /// only be a replay of something already rolled up, and is dropped.
+    private var warm: Set<SourceID> = []
 
     private func sharingNames(_ events: [UsageEvent]) -> [UsageEvent] {
         events.map { event in
@@ -297,9 +306,13 @@ final class UsageStore {
         let stale = archived.version < ArchivedEvents.currentVersion
         for source in sources where !source.rereadsOnLaunch {
             guard let state = archived.sources[source.id] else { continue }
-            events[source.id] = sharingNames(state.events)
+            // An archive written before this dedupe still carries the doubles.
+            var unique = Set<UsageEvent.ID>()
+            let kept = state.events.filter { unique.insert($0.id).inserted }
+            events[source.id] = sharingNames(kept)
+            ids[source.id] = unique
             rollups[source.id] = state.rollup
-            count += state.events.count
+            count += kept.count
             if stale {
                 // Read everything again, as this build decodes it. The first
                 // poll's events replace these by id; see `ArchivedEvents`.
@@ -308,11 +321,8 @@ final class UsageStore {
                 continue
             }
             savedCursors[source.id] = state.cursors
-            // `seen` catches history replayed into a *new* file on resume, so it
-            // is rebuilt from the archived ids rather than stored a second time.
-            await source.restore(
-                cursors: state.cursors, seen: Set(state.events.map(\.id))
-            )
+            warm.insert(source.id)
+            await source.restore(cursors: state.cursors)
         }
 
         let ms = Int(Date.now.timeIntervalSince(started) * 1000)
@@ -547,11 +557,18 @@ final class UsageStore {
                     // The whole log corpus, decoded afresh: it replaces what was
                     // archived, and only what it no longer has is kept.
                     needsCompaction = true
-                    let reread = Set(fresh.events.map(\.id))
+                    var reread = Set<UsageEvent.ID>()
+                    fresh.events = fresh.events.filter { reread.insert($0.id).inserted }
                     merged.removeAll { reread.contains($0.id) }
                     merged.append(contentsOf: fresh.events)
                     merged.sort { $0.timestamp < $1.timestamp }
+                    ids[source.id] = Set(merged.map(\.id))
                 } else {
+                    let isWarm = warm.contains(source.id)
+                    fresh.events = fresh.events.filter {
+                        (!isWarm || $0.timestamp >= rawCutoff)
+                            && ids[source.id, default: []].insert($0.id).inserted
+                    }
                     let newest = merged.last?.timestamp
                     merged.append(contentsOf: fresh.events)
 
@@ -571,12 +588,16 @@ final class UsageStore {
                 let expired = merged.prefix { $0.timestamp < rawCutoff }
                 if !expired.isEmpty {
                     var rollup = rollups[source.id] ?? UsageRollup()
-                    expired.forEach { rollup.add($0) }
+                    for event in expired {
+                        rollup.add(event)
+                        ids[source.id]?.remove(event.id)
+                    }
                     rollup.prune(before: now.addingTimeInterval(-Self.retention))
                     rollups[source.id] = rollup
                     merged.removeFirst(expired.count)
                 }
                 unsaved[source.id, default: []].append(contentsOf: fresh.events)
+                warm.insert(source.id)
                 events[source.id] = merged
                 logWorking[source.id] = fresh.workingSessions
 

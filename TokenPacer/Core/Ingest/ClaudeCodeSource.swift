@@ -42,8 +42,8 @@ actor ClaudeCodeSource: UsageSource {
         return now.timeIntervalSince(lastScan) < Self.scanAtLeastEvery
     }
 
-    func restore(cursors: [String: JSONLReader.Cursor], seen: Set<UsageEvent.ID>) {
-        scanner.restore(cursors: cursors, seen: seen)
+    func restore(cursors: [String: JSONLReader.Cursor]) {
+        scanner.restore(cursors: cursors)
     }
 
     func cursors() -> [String: JSONLReader.Cursor] { scanner.cursors }
