@@ -123,6 +123,14 @@ private func line(id: String, output: Int, at date: Date) -> String {
     """
 }
 
+@MainActor
+private func waitUntil(_ condition: () -> Bool) async throws {
+    let deadline = Date.now.addingTimeInterval(3)
+    while !condition(), Date.now < deadline {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+}
+
 /// The point of the exercise: a relaunch must not re-read the log corpus.
 @MainActor
 @Test func aRelaunchReadsOnlyWhatWasAppended() async throws {
@@ -137,8 +145,9 @@ private func line(id: String, output: Int, at date: Date) -> String {
     let first = CountingSource(root: root)
     let store = UsageStore(sources: [first], interval: 3600, archive: archive)
     store.start()
-    // Let the pump restore, poll and persist.
-    try await Task.sleep(for: .milliseconds(200))
+    // Until the poll has landed, not a fixed wait: under a parallel run 200ms
+    // was not always enough.
+    try await waitUntil { store.eventCount(.claude) == 2 }
     store.stop()
     await store.flush()
     #expect(store.eventCount(.claude) == 2)
@@ -151,7 +160,7 @@ private func line(id: String, output: Int, at date: Date) -> String {
     let second = CountingSource(root: root)
     let relaunched = UsageStore(sources: [second], interval: 3600, archive: archive)
     relaunched.start()
-    try await Task.sleep(for: .milliseconds(200))
+    try await waitUntil { relaunched.eventCount(.claude) == 3 }
     relaunched.stop()
 
     // All three events are present, but the first two came from the archive: the
@@ -176,7 +185,7 @@ private func line(id: String, output: Int, at date: Date) -> String {
 
     let store = UsageStore(sources: [CountingSource(root: root)], interval: 3600, archive: archive)
     store.start()
-    try await Task.sleep(for: .milliseconds(200))
+    try await waitUntil { store.eventCount(.claude) == 1 }
     store.stop()
     await store.flush()
 
@@ -185,7 +194,8 @@ private func line(id: String, output: Int, at date: Date) -> String {
 
     let relaunched = UsageStore(sources: [CountingSource(root: root)], interval: 3600, archive: archive)
     relaunched.start()
-    try await Task.sleep(for: .milliseconds(200))
+    // A snapshot means the poll has run; the count is what it decided.
+    try await waitUntil { relaunched.snapshots[.claude] != nil }
     relaunched.stop()
 
     #expect(relaunched.eventCount(.claude) == 1)
