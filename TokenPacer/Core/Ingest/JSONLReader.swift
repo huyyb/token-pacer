@@ -45,15 +45,21 @@ struct JSONLReader {
             return []
         }
 
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
-        try handle.seek(toOffset: cursor.offset)
-        var data = Data()
-        var limit = chunk
-        while let more = try handle.read(upToCount: limit - data.count), !more.isEmpty {
-            data.append(more)
-            if data.count < limit || data.lastIndex(of: 0x0A) != nil { break }
-            limit *= 2
+        // `FileHandle` hands its reads back autoreleased, and a scan is one
+        // long call with no pool of its own: without this every chunk of every
+        // log lived until the poll returned — the whole corpus, gigabytes.
+        let data: Data = try autoreleasepool {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            try handle.seek(toOffset: cursor.offset)
+            var data = Data()
+            var limit = chunk
+            while let more = try handle.read(upToCount: limit - data.count), !more.isEmpty {
+                data.append(more)
+                if data.count < limit || data.lastIndex(of: 0x0A) != nil { break }
+                limit *= 2
+            }
+            return data
         }
         guard !data.isEmpty else { return [] }
 
