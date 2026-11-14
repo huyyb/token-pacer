@@ -17,13 +17,21 @@ struct JSONLReader {
         set { cursors = Dictionary(uniqueKeysWithValues: newValue.map { (URL(filePath: $0.key), $0.value) }) }
     }
 
-    /// Complete lines appended since the last call.
+    /// Complete lines appended since the last call, up to about `chunk` bytes
+    /// of them; call again until it comes back empty.
+    ///
+    /// Bounded because a cold start meets logs of several hundred megabytes,
+    /// and reading one whole — then copying it out line by line — held twice
+    /// its size at once: gigabytes, across a heavy user's history. A single
+    /// line longer than `chunk` is read whole rather than never.
     ///
     /// A log being written to can end mid-line, so anything after the final
     /// newline is left for next time rather than handed back as a truncated
     /// record. A changed inode (rotation) or a shrunken file (truncation) resets
     /// the cursor to the start.
-    mutating func newLines(in url: URL, fileManager: FileManager = .default) throws -> [Data] {
+    mutating func newLines(
+        in url: URL, chunk: Int = 8 << 20, fileManager: FileManager = .default
+    ) throws -> [Data] {
         let attributes = try fileManager.attributesOfItem(atPath: url.path)
         let inode = (attributes[.systemFileNumber] as? UInt64) ?? 0
         let size = (attributes[.size] as? UInt64) ?? 0
@@ -40,7 +48,14 @@ struct JSONLReader {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         try handle.seek(toOffset: cursor.offset)
-        guard let data = try handle.readToEnd(), !data.isEmpty else { return [] }
+        var data = Data()
+        var limit = chunk
+        while let more = try handle.read(upToCount: limit - data.count), !more.isEmpty {
+            data.append(more)
+            if data.count < limit || data.lastIndex(of: 0x0A) != nil { break }
+            limit *= 2
+        }
+        guard !data.isEmpty else { return [] }
 
         guard let lastNewline = data.lastIndex(of: 0x0A) else {
             return []   // no complete line yet; leave the cursor where it was

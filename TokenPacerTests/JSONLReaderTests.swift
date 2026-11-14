@@ -126,3 +126,23 @@ private func append(_ text: String, to url: URL) {
     let missing = tempDir().appending(path: "nope.jsonl")
     #expect(throws: (any Error).self) { try reader.newLines(in: missing) }
 }
+
+/// A big log is read a chunk at a time, every line exactly once, and a line
+/// longer than the chunk still comes out whole.
+@Test func readsABigLogInChunks() throws {
+    let dir = tempDir()
+    let file = dir.appending(path: "log.jsonl")
+    let long = "{\"a\":\"" + String(repeating: "x", count: 100) + "\"}\n"
+    write((0..<50).map { "{\"a\":\($0)}\n" }.joined() + long, to: file)
+
+    var reader = JSONLReader()
+    var lines: [Data] = []
+    var calls = 0
+    while case let chunk = try reader.newLines(in: file, chunk: 32), !chunk.isEmpty {
+        lines += chunk
+        calls += 1
+    }
+    #expect(lines.count == 51)
+    #expect(calls > 10)
+    #expect(lines.last.map { String(decoding: $0, as: UTF8.self) } == String(long.dropLast()))
+}

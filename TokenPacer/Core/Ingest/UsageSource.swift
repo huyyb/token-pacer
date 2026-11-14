@@ -144,7 +144,14 @@ struct LogScanner {
     ) throws -> [UsageEvent] {
         var events: [UsageEvent] = []
         for file in JSONLReader.logFiles(under: root, modifiedAfter: since) {
-            guard let lines = try? reader.newLines(in: file) else { continue }
+            // A chunk at a time; only the tail is kept past its chunk, for the
+            // activity reading below.
+            var lines: [Data] = []
+            while let chunk = try? reader.newLines(in: file), !chunk.isEmpty {
+                for line in chunk { events.append(contentsOf: decode(line, file)) }
+                lines.append(contentsOf: chunk.suffix(Self.turnScan))
+                lines.removeFirst(max(0, lines.count - Self.turnScan))
+            }
             // Only the last line of each file, and only the two fields: a `user`
             // line carries the whole prompt, and decoding every one of them would
             // undo the byte prefilter that keeps a cold start cheap.
@@ -170,9 +177,6 @@ struct LogScanner {
                     activityByFile[file]?.turnEnded = meta.endsTurn
                 }
                 break
-            }
-            for line in lines {
-                events.append(contentsOf: decode(line, file))
             }
         }
         prune(at: Date.now)
