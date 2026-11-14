@@ -286,7 +286,7 @@ private actor SlowSource: UsageSource {
 
     func poll() throws -> SourceSnapshot {
         polls += 1
-        Thread.sleep(forTimeInterval: 0.05)
+        Thread.sleep(forTimeInterval: 0.3)   // wide: the test lands mid-poll by timing
         return SourceSnapshot(source: id, events: [], limits: nil)
     }
 }
@@ -300,7 +300,9 @@ private actor SlowSource: UsageSource {
     let store = UsageStore(sources: [source], interval: 3600, archive: nil)
 
     async let first: Void = store.refreshSoon()
-    try await Task.sleep(for: .milliseconds(10))
+    // Well inside the 300ms poll, so the next two land mid-refresh even on a
+    // loaded machine; 10ms inside 50ms was not always.
+    try await Task.sleep(for: .milliseconds(50))
     async let second: Void = store.refreshSoon()
     async let third: Void = store.refreshSoon()
     _ = await (first, second, third)
