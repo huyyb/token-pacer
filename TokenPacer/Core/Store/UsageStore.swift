@@ -286,8 +286,10 @@ final class UsageStore {
     /// last run instead of the whole log corpus.
     private func restoreEvents() async {
         let started = Date.now
-        guard let archived = archive?.loadEvents() else { return }
+        guard let archive, let archived = archive.loadEvents() else { return }
         var count = 0
+        // Still the old single document: rewrite it in the new shape at once.
+        if !archive.hasEventLog { needsCompaction = true }
 
         let stale = archived.version < ArchivedEvents.currentVersion
         for source in sources where !source.rereadsOnLaunch {
@@ -299,8 +301,10 @@ final class UsageStore {
                 // Read everything again, as this build decodes it. The first
                 // poll's events replace these by id; see `ArchivedEvents`.
                 rebuilding.insert(source.id)
+                needsCompaction = true
                 continue
             }
+            savedCursors[source.id] = state.cursors
             // `seen` catches history replayed into a *new* file on resume, so it
             // is rebuilt from the archived ids rather than stored a second time.
             await source.restore(
@@ -316,32 +320,65 @@ final class UsageStore {
     /// waiting for the full re-read to replace them.
     private var rebuilding: Set<SourceID> = []
 
-    /// Cheap to encode but megabytes to write, so it goes out on a slow cadence
-    /// and on the way out of the process — never on the 5s tick.
+    /// Appended on a slow cadence and on the way out of the process — never on
+    /// the 5s tick.
     private static let eventSaveInterval: TimeInterval = 5 * 60
     private var lastEventSave: Date?
-    /// Events changed since the last save. A quiet machine used to rewrite the
-    /// whole archive every five minutes for nothing — and encoding it is what
-    /// pushed the process to several times its resting footprint.
-    private var eventsDirty = false
     private var reportedFirstSnapshot = false
 
+    /// What the archive does not have yet. A save appends exactly this — a
+    /// quiet machine appends nothing at all — rather than rewriting every event
+    /// it holds, which is what used to take the process to several times its
+    /// resting footprint every five minutes.
+    private var unsaved: [SourceID: [UsageEvent]] = [:]
+    private var savedCursors: [SourceID: [String: JSONLReader.Cursor]] = [:]
+    /// The archive no longer matches what an append would build on: a re-read
+    /// replaced events, or the file is in the old shape.
+    private var needsCompaction = false
+    /// Past this the log is mostly superseded lines and is rewritten whole.
+    private static let compactionBytes = 16 << 20
+
     private func persistEvents(now: Date = Date.now, force: Bool = false) async {
-        guard let archive, eventsDirty else { return }
+        guard let archive else { return }
         if !force, let last = lastEventSave, now.timeIntervalSince(last) < Self.eventSaveInterval {
             return
         }
         lastEventSave = now
-        eventsDirty = false
 
-        var archived = ArchivedEvents()
-        for source in sources {
-            archived.sources[source.id] = ArchivedEvents.PerSource(
-                cursors: await source.cursors(), events: events[source.id] ?? [],
-                rollup: rollups[source.id]
-            )
+        // A source that reads itself whole on every launch is never restored,
+        // so archiving it would only grow the file.
+        let archived = sources.filter { !$0.rereadsOnLaunch }
+        var cursors: [SourceID: [String: JSONLReader.Cursor]] = [:]
+        for source in archived { cursors[source.id] = await source.cursors() }
+        defer {
+            savedCursors = cursors
+            unsaved = [:]
         }
-        archive.saveEvents(archived)
+
+        let pending = unsaved.values.reduce(0) { $0 + $1.count }
+        if needsCompaction || pending > 20_000 || archive.eventLogBytes > Self.compactionBytes {
+            needsCompaction = false
+            var full = ArchivedEvents()
+            for source in archived {
+                full.sources[source.id] = ArchivedEvents.PerSource(
+                    cursors: cursors[source.id] ?? [:], events: events[source.id] ?? [],
+                    rollup: rollups[source.id]
+                )
+            }
+            archive.saveEvents(full)
+            return
+        }
+
+        var delta = ArchivedEvents()
+        for source in archived {
+            let saved = savedCursors[source.id] ?? [:]
+            let moved = (cursors[source.id] ?? [:]).filter { saved[$0.key] != $0.value }
+            let added = unsaved[source.id] ?? []
+            guard !moved.isEmpty || !added.isEmpty else { continue }
+            delta.sources[source.id] = ArchivedEvents.PerSource(cursors: moved, events: added)
+        }
+        guard !delta.sources.isEmpty else { return }
+        archive.appendEvents(delta)
     }
 
     /// Called on the way out: the last few minutes of events would otherwise be
@@ -501,6 +538,7 @@ final class UsageStore {
                     rollups[source.id]?.clear(for: fresh.events.lazy.filter { $0.timestamp < rawCutoff })
                     // The whole log corpus, decoded afresh: it replaces what was
                     // archived, and only what it no longer has is kept.
+                    needsCompaction = true
                     let reread = Set(fresh.events.map(\.id))
                     merged.removeAll { reread.contains($0.id) }
                     merged.append(contentsOf: fresh.events)
@@ -530,7 +568,7 @@ final class UsageStore {
                     rollups[source.id] = rollup
                     merged.removeFirst(expired.count)
                 }
-                if !fresh.events.isEmpty { eventsDirty = true }
+                unsaved[source.id, default: []].append(contentsOf: fresh.events)
                 events[source.id] = merged
                 logWorking[source.id] = fresh.workingSessions
 

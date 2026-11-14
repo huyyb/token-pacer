@@ -105,11 +105,56 @@ struct Archive: Sendable {
         }
     }
 
-    /// Sits beside the state file.
-    var eventsURL: URL { url.deletingLastPathComponent().appending(path: "events.json") }
+    /// Where events were archived before the append-only log: one JSON
+    /// document, rewritten whole. Read once to migrate, then removed.
+    var legacyEventsURL: URL { url.deletingLastPathComponent().appending(path: "events.json") }
+
+    /// One `ArchivedEvents` per line, each a change on top of the lines before
+    /// it: cursors overwrite, events add, a rollup replaces.
+    ///
+    /// Append-only because rewriting the whole archive every five minutes was
+    /// the largest thing this app did — encoding tens of megabytes of JSON took
+    /// the process to several times its resting footprint, for a save that
+    /// usually carried a handful of new events. `saveEvents` still rewrites it
+    /// whole, but on a cadence of megabytes appended rather than minutes.
+    var eventLogURL: URL { url.deletingLastPathComponent().appending(path: "events.jsonl") }
+
+    var hasEventLog: Bool { FileManager.default.fileExists(atPath: eventLogURL.path) }
+
+    var eventLogBytes: Int {
+        ((try? FileManager.default.attributesOfItem(atPath: eventLogURL.path))?[.size] as? Int) ?? 0
+    }
 
     func loadEvents() -> ArchivedEvents? {
-        guard let data = try? Data(contentsOf: eventsURL) else { return nil }
+        guard let data = try? Data(contentsOf: eventLogURL) else { return loadLegacyEvents() }
+        var folded = ArchivedEvents()
+        var read = 0
+        for line in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
+            // A line cut short by a crash mid-append costs that save, not the
+            // archive: the lines either side of it are whole.
+            guard let delta = try? JSONDecoder.archive.decode(ArchivedEvents.self, from: Data(line))
+            else { continue }
+            read += 1
+            folded.version = min(folded.version, delta.version)
+            for (id, change) in delta.sources {
+                var into = folded.sources[id] ?? ArchivedEvents.PerSource()
+                into.cursors.merge(change.cursors) { $1 }
+                into.events.append(contentsOf: change.events)
+                if let rollup = change.rollup { into.rollup = rollup }
+                folded.sources[id] = into
+            }
+        }
+        guard read > 0, folded.version <= ArchivedEvents.currentVersion else { return nil }
+        // Appended a poll at a time, so ordered within a line but not
+        // guaranteed across a resumed session's replay.
+        for id in folded.sources.keys {
+            folded.sources[id]?.events.sort { $0.timestamp < $1.timestamp }
+        }
+        return folded
+    }
+
+    private func loadLegacyEvents() -> ArchivedEvents? {
+        guard let data = try? Data(contentsOf: legacyEventsURL) else { return nil }
         do {
             let archived = try JSONDecoder.archive.decode(ArchivedEvents.self, from: data)
             guard archived.version <= ArchivedEvents.currentVersion else { return nil }
@@ -122,10 +167,56 @@ struct Archive: Sendable {
         }
     }
 
+    /// Adds one line on top of what is there.
+    func appendEvents(_ delta: ArchivedEvents) {
+        do {
+            var line = try JSONEncoder.compact.encode(delta)
+            line.append(0x0A)
+            guard let handle = try? FileHandle(forUpdating: eventLogURL) else {
+                return saveEvents(delta)
+            }
+            defer { try? handle.close() }
+            let end = try handle.seekToEnd()
+            // A crash mid-append leaves no newline; without one this line would
+            // join the torn one and be lost with it.
+            if end > 0 {
+                try handle.seek(toOffset: end - 1)
+                if try handle.read(upToCount: 1) != Data([0x0A]) { line.insert(0x0A, at: 0) }
+            }
+            try handle.write(contentsOf: line)
+        } catch {
+            Log.ingest.error("event log unwritable: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Rewrites the log as the whole state. Encoded a slice at a time: one
+    /// document of every event is what built the spike this format exists to
+    /// avoid.
     func saveEvents(_ archived: ArchivedEvents) {
-        var archived = archived
-        archived.savedAt = Date.now
-        write(archived, to: eventsURL, pretty: false)
+        do {
+            var file = Data()
+            for (id, state) in archived.sources {
+                var head = ArchivedEvents(version: archived.version)
+                head.sources[id] = ArchivedEvents.PerSource(cursors: state.cursors, rollup: state.rollup)
+                file.append(try JSONEncoder.compact.encode(head))
+                file.append(0x0A)
+                for start in stride(from: 0, to: state.events.count, by: 2_000) {
+                    var chunk = ArchivedEvents(version: archived.version)
+                    chunk.sources[id] = ArchivedEvents.PerSource(
+                        events: Array(state.events[start..<min(start + 2_000, state.events.count)])
+                    )
+                    file.append(try JSONEncoder.compact.encode(chunk))
+                    file.append(0x0A)
+                }
+            }
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            try file.write(to: eventLogURL, options: .atomic)
+            try? FileManager.default.removeItem(at: legacyEventsURL)
+        } catch {
+            Log.ingest.error("archive unwritable: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     func save(_ state: ArchivedState) {

@@ -349,3 +349,66 @@ private func line(id: String, output: Int, at date: Date) -> String {
     let big = try JSONDecoder().decode(UsageEvent.self, from: Data(#"{"i":18446744073709551557,"s":"claude","t":0,"c":{"output":1,"input":0,"cacheWrite":0,"cacheRead":0,"reasoning":0}}"#.utf8))
     #expect(big.id == 18_446_744_073_709_551_557)
 }
+
+/// The log folds back into the state it was built from: a rewrite, then
+/// appends on top — cursors overwriting, events adding — and a line torn by a
+/// crash costs only itself.
+@Test func theEventLogFoldsAppendsOntoTheLastRewrite() throws {
+    func event(_ key: String, at seconds: Double) -> UsageEvent {
+        UsageEvent(id: key, source: .claude, timestamp: Date(timeIntervalSince1970: seconds),
+                   model: nil, project: nil, counts: TokenCounts(output: 1))
+    }
+    let archive = temporaryArchive()
+    var rollup = UsageRollup()
+    rollup.add(event("old", at: 0))
+
+    var full = ArchivedEvents()
+    full.sources[.claude] = ArchivedEvents.PerSource(
+        cursors: ["a": .init(offset: 1, inode: 1)],
+        events: (0..<4_500).map { event("e\($0)", at: 1_000 + Double($0)) },
+        rollup: rollup
+    )
+    archive.saveEvents(full)
+
+    var delta = ArchivedEvents()
+    delta.sources[.claude] = ArchivedEvents.PerSource(
+        cursors: ["a": .init(offset: 9, inode: 1), "b": .init(offset: 2, inode: 2)],
+        events: [event("late", at: 900_000)]
+    )
+    archive.appendEvents(delta)
+    // A torn append, then a whole one after it.
+    let handle = try FileHandle(forWritingTo: archive.eventLogURL)
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data(#"{"version":2,"sources":["cla"#.utf8))
+    try handle.close()
+    delta.sources[.claude] = ArchivedEvents.PerSource(events: [event("later", at: 900_001)])
+    archive.appendEvents(delta)
+
+    let loaded = try #require(archive.loadEvents()?.sources[.claude])
+    #expect(loaded.events.count == 4_502)
+    #expect(loaded.events.last?.id == UsageEvent.hash("later"))
+    #expect(loaded.cursors == ["a": .init(offset: 9, inode: 1), "b": .init(offset: 2, inode: 2)])
+    #expect(loaded.rollup == rollup)
+}
+
+/// The old single document is read once and replaced by the log.
+@Test func theOldEventArchiveIsMigrated() throws {
+    let archive = temporaryArchive()
+    var old = ArchivedEvents()
+    old.sources[.codex] = ArchivedEvents.PerSource(cursors: ["x": .init(offset: 3, inode: 3)])
+    try FileManager.default.createDirectory(
+        at: archive.url.deletingLastPathComponent(), withIntermediateDirectories: true
+    )
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601   // as the old writer had it
+    try encoder.encode(old).write(to: archive.legacyEventsURL)
+
+    let loaded = try #require(archive.loadEvents())
+    #expect(loaded.sources[.codex]?.cursors["x"]?.offset == 3)
+    #expect(!archive.hasEventLog)
+
+    archive.saveEvents(loaded)
+    #expect(archive.hasEventLog)
+    #expect(!FileManager.default.fileExists(atPath: archive.legacyEventsURL.path))
+    #expect(archive.loadEvents()?.sources[.codex]?.cursors["x"]?.offset == 3)
+}
