@@ -300,14 +300,19 @@ final class UsageStore {
     /// and on the way out of the process — never on the 5s tick.
     private static let eventSaveInterval: TimeInterval = 5 * 60
     private var lastEventSave: Date?
+    /// Events changed since the last save. A quiet machine used to rewrite the
+    /// whole archive every five minutes for nothing — and encoding it is what
+    /// pushed the process to several times its resting footprint.
+    private var eventsDirty = false
     private var reportedFirstSnapshot = false
 
     private func persistEvents(now: Date = Date.now, force: Bool = false) async {
-        guard let archive else { return }
+        guard let archive, eventsDirty else { return }
         if !force, let last = lastEventSave, now.timeIntervalSince(last) < Self.eventSaveInterval {
             return
         }
         lastEventSave = now
+        eventsDirty = false
 
         var archived = ArchivedEvents()
         for source in sources {
@@ -498,6 +503,7 @@ final class UsageStore {
                 } else if merged.last.map({ $0.timestamp < cutoff }) == true {
                     merged.removeAll()
                 }
+                if !fresh.events.isEmpty { eventsDirty = true }
                 events[source.id] = merged
                 logWorking[source.id] = fresh.workingSessions
 
