@@ -297,7 +297,7 @@ private actor SlowSource: UsageSource {
 /// on, and the next tick is five seconds away.
 @MainActor @Test func writesDuringARefreshCoalesceIntoExactlyOneMore() async throws {
     let source = SlowSource()
-    let store = UsageStore(sources: [source], interval: 3600)
+    let store = UsageStore(sources: [source], interval: 3600, archive: nil)
 
     async let first: Void = store.refreshSoon()
     try await Task.sleep(for: .milliseconds(10))

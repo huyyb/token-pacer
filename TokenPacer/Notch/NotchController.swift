@@ -47,7 +47,8 @@ final class NotchController {
                 .claude: ClaudeUsagePanel(read: TerminalCLI.reader(.claude)),
                 .codex: CodexUsagePanel(read: CodexAppServer.reader()),
                 .copilot: CopilotUsagePanel(read: CopilotAppServer.reader()),
-            ]
+            ],
+            archive: .default
         )
 
         let size = PillState.hostSize

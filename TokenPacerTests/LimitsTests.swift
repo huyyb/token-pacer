@@ -297,7 +297,7 @@ private actor StatedSource: UsageSource {
 /// another one — it is held until somebody looks, and each mark is raised once
 /// per window however many times the same reading lands.
 @MainActor @Test func aCrossingIsRaisedOncePerWindowAndClearedByLooking() async {
-    let store = UsageStore(sources: [StatedSource(id: .codex, percent: 80)], interval: 3600)
+    let store = UsageStore(sources: [StatedSource(id: .codex, percent: 80)], interval: 3600, archive: nil)
     store.alertThresholds = [.codex: [75, 90]]
     store.activeSource = .claude          // the pill is reporting somebody else
 
@@ -316,7 +316,7 @@ private actor StatedSource: UsageSource {
 /// Nothing to say when no marks are being watched: the switch in Preferences is
 /// what empties the list.
 @MainActor @Test func noMarksMeansNoCard() async {
-    let store = UsageStore(sources: [StatedSource(id: .codex, percent: 99)], interval: 3600)
+    let store = UsageStore(sources: [StatedSource(id: .codex, percent: 99)], interval: 3600, archive: nil)
     await store.refresh()
     #expect(store.alert == nil)
 }

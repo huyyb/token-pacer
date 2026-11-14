@@ -251,7 +251,9 @@ final class UsageStore {
         weights: TokenWeights = .default,
         interval: TimeInterval = 5,
         panels: [SourceID: any UsagePanel] = [:],
-        archive: Archive? = .default,
+        /// Nil unless asked for: the real one is the user's history, and a
+        /// store built by a test once overwrote it with a stub's.
+        archive: Archive? = nil,
         appVersion: String = UsageStore.runningVersion
     ) {
         self.sources = sources

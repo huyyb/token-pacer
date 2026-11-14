@@ -11,7 +11,8 @@ enum Probe {
                 .claude: ClaudeUsagePanel(read: TerminalCLI.reader(.claude)),
                 .codex: CodexUsagePanel(read: CodexAppServer.reader()),
                 .copilot: CopilotUsagePanel(read: CopilotAppServer.reader()),
-            ]
+            ],
+            archive: .default
         )
         await store.refresh()
         // The reading is launched, not awaited, so the first refresh only starts
