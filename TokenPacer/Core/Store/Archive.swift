@@ -126,7 +126,10 @@ struct Archive: Sendable {
     }
 
     func loadEvents() -> ArchivedEvents? {
-        guard let data = try? Data(contentsOf: eventLogURL) else { return loadLegacyEvents() }
+        // Mapped, not read: the file is paged in and dropped again rather than
+        // copied into dirty memory the process keeps long after launch.
+        guard let data = try? Data(contentsOf: eventLogURL, options: .mappedIfSafe)
+        else { return loadLegacyEvents() }
         var folded = ArchivedEvents()
         var read = 0
         for line in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
