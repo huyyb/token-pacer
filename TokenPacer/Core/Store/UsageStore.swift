@@ -292,6 +292,7 @@ final class UsageStore {
         var count = 0
         // Still the old single document: rewrite it in the new shape at once.
         if !archive.hasEventLog { needsCompaction = true }
+        compactedBytes = archive.eventLogBytes
 
         let stale = archived.version < ArchivedEvents.currentVersion
         for source in sources where !source.rereadsOnLaunch {
@@ -337,8 +338,11 @@ final class UsageStore {
     /// The archive no longer matches what an append would build on: a re-read
     /// replaced events, or the file is in the old shape.
     private var needsCompaction = false
-    /// Past this the log is mostly superseded lines and is rewritten whole.
+    /// Appended past the last rewrite, the log is rewritten whole. Measured
+    /// from that rewrite, not from zero: a heavy user's history alone is past
+    /// any fixed size, and every save then rewrote the lot.
     private static let compactionBytes = 16 << 20
+    private var compactedBytes = 0
 
     private func persistEvents(now: Date = Date.now, force: Bool = false) async {
         guard let archive else { return }
@@ -358,7 +362,8 @@ final class UsageStore {
         }
 
         let pending = unsaved.values.reduce(0) { $0 + $1.count }
-        if needsCompaction || pending > 20_000 || archive.eventLogBytes > Self.compactionBytes {
+        if needsCompaction || pending > 20_000
+            || archive.eventLogBytes - compactedBytes > Self.compactionBytes {
             needsCompaction = false
             var full = ArchivedEvents()
             for source in archived {
@@ -368,6 +373,7 @@ final class UsageStore {
                 )
             }
             archive.saveEvents(full)
+            compactedBytes = archive.eventLogBytes
             return
         }
 
