@@ -830,7 +830,8 @@ final class UsageStore {
             secondary: rolled(reading.secondary),
             planType: reading.planType,
             observedAt: reading.observedAt,
-            spend: reading.spend
+            spend: reading.spend,
+            fable: rolled(reading.fable)
         )
     }
 }

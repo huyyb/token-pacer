@@ -153,6 +153,14 @@ struct PinnedPanelView: View {
                         height: 7, trackOpacity: 0.12
                     )
                 }
+                // Only when Claude prints one; every other account keeps the
+                // panel's height.
+                if let fable = shown?.fablePercent {
+                    VStack(alignment: .leading, spacing: 7) {
+                        captionRow("Fable", fableCaption(fable))
+                        CapBar(percent: fable, tone: toneScale(fable), height: 4, trackOpacity: 0.12)
+                    }
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     captionRow("Activity", activityCaption)
                     Sparkline(values: panel.sparkline, tone: tone)
@@ -191,6 +199,14 @@ struct PinnedPanelView: View {
             : Format.weekday(resetsAt)
         return String(
             localized: "\(percent) · resets \(stamp)",
+            comment: "Longer cap's caption. Second value is a localized weekday or date."
+        )
+    }
+
+    private func fableCaption(_ percent: Double) -> String {
+        guard let resetsAt = shown?.fableResetsAt else { return Format.percent(percent) }
+        return String(
+            localized: "\(Format.percent(percent)) · resets \(Format.weekday(resetsAt))",
             comment: "Longer cap's caption. Second value is a localized weekday or date."
         )
     }

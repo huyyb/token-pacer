@@ -152,6 +152,8 @@ struct RateLimits: Equatable, Sendable, Codable {
     let planType: String?
     let observedAt: Date
     var spend: Spend?
+    /// Claude's separate weekly cap on Fable, printed under the all-models one.
+    var fable: RateLimitWindow? = nil
 }
 
 struct SourceSnapshot: Sendable {

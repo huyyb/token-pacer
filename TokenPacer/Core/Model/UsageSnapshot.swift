@@ -16,6 +16,9 @@ struct UsageSnapshot: Equatable, Sendable {
     var weeklyResetsAt: Date?
     /// The same, for the longer window under the dot. Usually a week.
     var weeklyWindowMinutes: Int?
+    /// Claude's own weekly cap on Fable. Nil on every other provider.
+    var fablePercent: Double?
+    var fableResetsAt: Date?
     /// A 5-hour window is open. True for hours at a time.
     var isActive: Bool = false
     /// Tokens are flowing *now* — the logs grew within `burningWindow`. This is
@@ -116,6 +119,10 @@ enum SnapshotBuilder {
             snapshot.weeklyPercent = secondary.usedPercent
             snapshot.weeklyResetsAt = secondary.resetsAt
             snapshot.weeklyWindowMinutes = secondary.windowMinutes
+        }
+        if let fable = limits?.fable, fable.resetsAt > now {
+            snapshot.fablePercent = fable.usedPercent
+            snapshot.fableResetsAt = fable.resetsAt
         }
 
         let splitSpan = splitSpan(primary, current)

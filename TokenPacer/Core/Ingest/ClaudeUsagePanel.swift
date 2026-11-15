@@ -44,7 +44,11 @@ struct ClaudeUsagePanel: UsagePanel {
             // window layout would not be.
             planType: nil,
             observedAt: now,
-            spend: spend(in: text, now: now)
+            spend: spend(in: text, now: now),
+            // ponytail: one named model; parse `Current week (<name>)` generically
+            // if Claude starts capping a second one.
+            fable: window(after: #"Current\s*week\s*\(\s*Fable\s*\)"#, in: text,
+                          minutes: weeklyWindowMinutes, now: now)
         )
     }
 

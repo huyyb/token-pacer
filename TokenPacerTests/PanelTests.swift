@@ -28,6 +28,7 @@ Total~786tok/turn Currentsession 7%used Resets2:50pm(Asia/Saigon) Currentweek(al
     let limits = try #require(ClaudeUsagePanel.parse(welded, now: now))
     #expect(limits.primary?.usedPercent == 7)
     #expect(limits.secondary?.usedPercent == 19)          // not the Fable 0%
+    #expect(limits.fable?.usedPercent == 0)
     #expect(limits.spend?.used == Money(amountMinor: 1199, currency: "SGD", exponent: 2))
 
     var calendar = Calendar(identifier: .gregorian)
@@ -48,6 +49,13 @@ Total~786tok/turn Currentsession 7%used Resets2:50pm(Asia/Saigon) Currentweek(al
     let limits = try #require(ClaudeUsagePanel.parse(panel, now: now))
     #expect(limits.secondary?.usedPercent == 18)
     #expect(limits.secondary?.windowMinutes == 10_080)
+}
+
+@Test func theFableCapIsReadSeparately() throws {
+    let limits = try #require(ClaudeUsagePanel.parse(panel.replacing("0% usedResets Sep 22", with: "37% usedResets Sep 22"), now: now))
+    #expect(limits.fable?.usedPercent == 37)
+    #expect(limits.secondary?.usedPercent == 18)
+    #expect(limits.fable?.resetsAt == limits.secondary?.resetsAt)
 }
 
 /// `2:50pm` with no date: the next such moment, which today still is.
